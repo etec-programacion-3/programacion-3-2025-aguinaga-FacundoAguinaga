@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cliente de Prueba Socket.IO</title>
+</head>
+<body>
+    <h1>Cliente de Prueba para Chat</h1>
+    <p>Revisa la consola de tu servidor Node.js.</p>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+    <script>
+        // Nos conectamos al servidor que está en el mismo origen
+        const socket = io("http://localhost:3000");
+
+        // Este código se ejecuta cuando el cliente se conecta exitosamente
+        socket.on('connect', () => {
+            console.log('Conectado al servidor con ID:', socket.id);
+        });
+    </script>
+</body>
+</html>
