@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL") // Esto toma la URL del archivo .env
+}
+
+// ========== MODELOS DE LA BASE DE DATOS ==========
+
+// Modelo para los Usuarios
+model User {
+  id        String   @id @default(cuid()) // ID único (ej: cl...)
+  email     String   @unique             // Email debe ser único
+  username  String   @unique             // Nombre de usuario también único
+  password  String                       // Contraseña (la guardaremos hasheada)
+  createdAt DateTime @default(now())     // Fecha de creación
+
+  // --- Relaciones ---
+  // Un usuario puede enviar muchos mensajes.
+  messages Message[]
+  // Un usuario puede pertenecer a muchos canales (relación muchos a muchos).
+  channels Channel[]
+}
+
+// Modelo para los Canales de Chat
+model Channel {
+  id        String   @id @default(cuid())
+  name      String   @unique             // El nombre del canal debe ser único
+  createdAt DateTime @default(now())
+
+  // --- Relaciones ---
+  // Un canal puede tener muchos mensajes.
+  messages Message[]
+  // Un canal puede tener muchos usuarios (relación muchos a muchos).
+  members User[]
+}
+
+// Modelo para los Mensajes
+model Message {
+  id        String   @id @default(cuid())
+  content   String                       // El contenido del mensaje de texto
+  createdAt DateTime @default(now())
+
+  // --- Relaciones ---
+  // Un mensaje pertenece a un solo usuario.
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String   // Llave foránea para el User
+
+  // Un mensaje pertenece a un solo canal.
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  channelId String   // Llave foránea para el Channel
+}
