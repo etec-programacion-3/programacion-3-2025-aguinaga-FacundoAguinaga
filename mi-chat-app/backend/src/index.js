@@ -1,6 +1,12 @@
 import express from 'express';
 import http from 'http';
 import { Server as SocketServer } from 'socket.io';
+import authRoutes from './routes/auth.routes.js';
+
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+
 
 // Inicialización del servidor
 const app = express();
@@ -13,6 +19,12 @@ const io = new SocketServer(server, {
     origin: '*', // En un entorno de producción, debo restringir esto a mi dominio del frontend.
   },
 });
+
+// Middleware para parsear JSON
+app.use(express.json());
+
+// Rutas
+app.use('/api/auth', authRoutes);
 
 app.use(express.static('public'));
 
