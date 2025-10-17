@@ -23,8 +23,8 @@ router.post('/register', async (req, res) => {
   } catch (error) {
     console.error('Error en /register:', error);
     if (error.code === 'P2002') {
-      // Error de clave única (email ya existe)
-      return res.status(400).json({ error: 'El email ya está registrado' });
+      // Error de clave única (email o username ya existen)
+      return res.status(400).json({ error: 'El email o nombre de usuario ya está registrado' });
     }
     res.status(500).json({ error: 'Error interno del servidor' });
   }
@@ -49,13 +49,19 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
-    // Generar el token JWT
-    const token = jwt.sign({ id: user.id, email: user.email }, 'your-secret-key', {
-      expiresIn: '1h',
-    });
+    // --- MODIFICACIÓN CLAVE ---
+    // Generar el token JWT incluyendo id, email y username
+    const token = jwt.sign(
+      { id: user.id, email: user.email, username: user.username }, // Payload actualizado
+      'your-secret-key', // Reemplazar con variable de entorno en producción
+      {
+        expiresIn: '1h',
+      }
+    );
 
     res.json({ message: 'Inicio de sesión exitoso', token });
   } catch (error) {
+    console.error('Error en /login:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
