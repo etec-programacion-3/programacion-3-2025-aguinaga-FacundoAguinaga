@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react';
 function MessageList({ messages }) {
   const endOfMessagesRef = useRef(null);
 
-  // Efecto para hacer scroll hacia el último mensaje
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -12,8 +11,13 @@ function MessageList({ messages }) {
     <div className="message-list">
       {messages.map((msg) => (
         <div key={msg.id} className="message">
-          <span className="message-author">{msg.author.name}:</span>
-          <p className="message-content">{msg.content}</p>
+          <div className="avatar-placeholder">
+            {msg.author.username.charAt(0).toUpperCase()}
+          </div>
+          <div className="message-body">
+            <span className="message-author">{msg.author.username}</span>
+            <p className="message-content">{msg.content}</p>
+          </div>
         </div>
       ))}
       <div ref={endOfMessagesRef} />

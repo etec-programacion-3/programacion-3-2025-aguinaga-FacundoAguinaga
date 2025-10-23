@@ -52,8 +52,8 @@ router.post('/login', async (req, res) => {
     // --- MODIFICACIÓN CLAVE ---
     // Generar el token JWT incluyendo id, email y username
     const token = jwt.sign(
-      { id: user.id, email: user.email, username: user.username }, // Payload actualizado
-      'your-secret-key', // Reemplazar con variable de entorno en producción
+      { id: user.id, email: user.email, username: user.username },
+      process.env.JWT_SECRET, // 👈 USA LA VARIABLE DE ENTORNO AQUÍ TAMBIÉN
       {
         expiresIn: '1h',
       }
