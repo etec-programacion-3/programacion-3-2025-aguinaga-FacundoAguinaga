@@ -1,9 +1,9 @@
 import express from 'express';
 import http from 'http';
+import cors from 'cors';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken'; // Corregido a import
 import 'dotenv/config';
-
 import authRoutes from './routes/auth.routes.js';
 import { PrismaClient } from '@prisma/client';
 
@@ -38,6 +38,7 @@ io.use((socket, next) => {
 });
 
 // Middlewares y Rutas de Express
+app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use(express.static('public')); // Para servir el index.html
