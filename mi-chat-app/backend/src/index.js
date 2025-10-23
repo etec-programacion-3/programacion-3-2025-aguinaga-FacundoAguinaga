@@ -1,5 +1,7 @@
 import express from 'express';
 import http from 'http';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -8,6 +10,7 @@ import authRoutes from './routes/auth.routes.js';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const voiceChannels = {};
 
 // 1. Inicialización del servidor
 const app = express();
@@ -39,8 +42,16 @@ io.use((socket, next) => {
 app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRoutes);
-app.use(express.static('public'));
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 2. Sirve los archivos estáticos de la build de React
+app.use(express.static(path.join(__dirname, '../dist')));
+// 3. Redirige todas las demás peticiones al index.html de React
+app.get(/^(?!\/api).*/, (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist', 'index.html'));
+});
 // 3. Lógica de Socket.IO
 io.on('connection', (socket) => {
   console.log(`✅ Cliente conectado: ${socket.id} (Usuario: ${socket.user.username})`);
@@ -191,10 +202,64 @@ io.on('connection', (socket) => {
       }
     }
   });
+
+  // --- Eventos de Señalización para WebRTC ---
+
+  socket.on('join-voice-channel', (channelId) => {
+    // Si el canal de voz no existe en nuestro registro, lo creamos
+    if (!voiceChannels[channelId]) {
+      voiceChannels[channelId] = {};
+    }
+
+    // Enviamos al nuevo usuario la lista de los que ya estaban
+    const existingUsers = voiceChannels[channelId];
+    socket.emit('existing-voice-users', existingUsers);
+
+    // Añadimos al nuevo usuario al registro
+    voiceChannels[channelId][socket.id] = socket.user.id;
+    
+    // Notificamos a los demás que un nuevo usuario se ha unido
+    socket.broadcast.to(channelId).emit('user-joined-voice', { 
+      userId: socket.user.id, 
+      socketId: socket.id 
+    });
+  });
+
+  socket.on('leave-voice-channel', (channelId) => {
+    if (voiceChannels[channelId]) {
+      delete voiceChannels[channelId][socket.id];
+      socket.broadcast.to(channelId).emit('user-left-voice', { socketId: socket.id });
+    }
+  });
+
+  // Reenviar oferta, respuesta y candidatos (estos no cambian)
+  socket.on('voice-offer', ({ offer, targetSocketId }) => {
+    socket.to(targetSocketId).emit('voice-offer', { offer, fromSocketId: socket.id });
+  });
+
+  socket.on('voice-answer', ({ answer, targetSocketId }) => {
+    socket.to(targetSocketId).emit('voice-answer', { answer, fromSocketId: socket.id });
+  });
+
+  socket.on('ice-candidate', ({ candidate, targetSocketId }) => {
+    socket.to(targetSocketId).emit('ice-candidate', { candidate, fromSocketId: socket.id });
+  });
+
+  socket.on('disconnect', async () => {
+    console.log(`❌ Cliente desconectado: ${socket.id}`);
+    
+    // Eliminar al usuario de cualquier canal de voz en el que estuviera
+    for (const channelId in voiceChannels) {
+      if (voiceChannels[channelId][socket.id]) {
+        delete voiceChannels[channelId][socket.id];
+        socket.broadcast.to(channelId).emit('user-left-voice', { socketId: socket.id });
+      }
+    }
+  });
 });
 
 // 4. Iniciar el servidor
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor corriendo en http://<10.56.182.58:>:${PORT}`);
 });

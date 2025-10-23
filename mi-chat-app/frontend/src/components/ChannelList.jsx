@@ -1,20 +1,30 @@
-import { FaHashtag } from 'react-icons/fa'; // Importar el icono
+// src/components/ChannelList.jsx
+import { FaHashtag } from 'react-icons/fa';
 
-function ChannelList({ channels, selectedChannelId, onChannelSelect }) {
+// Recibe la nueva prop unreadChannels
+function ChannelList({ channels, selectedChannelId, onChannelSelect, unreadChannels }) {
   return (
     <div className="channel-list">
       <h3>Canales de texto</h3>
       <ul>
-        {channels.map((channel) => (
-          <li
-            key={channel.id}
-            className={`channel-item ${channel.id === selectedChannelId ? 'active' : ''}`}
-            onClick={() => onChannelSelect(channel)}
-          >
-            <FaHashtag />
-            <span>{channel.name}</span>
-          </li>
-        ))}
+        {channels.map((channel) => {
+          const isUnread = unreadChannels.has(channel.id);
+          const isActive = channel.id === selectedChannelId;
+          
+          // Construye las clases dinámicamente
+          const channelClasses = `channel-item ${isActive ? 'active' : ''} ${isUnread ? 'unread' : ''}`;
+
+          return (
+            <li
+              key={channel.id}
+              className={channelClasses}
+              onClick={() => onChannelSelect(channel)}
+            >
+              <FaHashtag />
+              <span>{channel.name}</span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

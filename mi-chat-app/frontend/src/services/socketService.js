@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 
 // URL de tu servidor backend
-const SERVER_URL = 'http://localhost:3000';
+const SERVER_URL = 'http://10.56.182.58:3000/';
 
 let socket;
 

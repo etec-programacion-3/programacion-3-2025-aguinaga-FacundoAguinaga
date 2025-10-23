@@ -1,5 +1,5 @@
 // La URL base de tu API de backend
-const API_URL = 'http://localhost:3000/api/auth';
+const API_URL = 'http://10.56.182.58:3000/api/auth';
 
 /**
  * Registra un nuevo usuario.
