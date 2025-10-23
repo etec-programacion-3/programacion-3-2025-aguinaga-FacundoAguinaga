@@ -2,19 +2,20 @@ import { useState, useEffect, useRef } from 'react'; // Importa useRef
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { initSocket, getSocket, disconnectSocket } from '../services/socketService';
-
+import VoiceChat from '../components/VoiceChat';
 import ChannelList from '../components/ChannelList';
 import ChatWindow from '../components/ChatWindow';
 
 function ChatPage() {
   const { token, logoutAction } = useAuth();
   const navigate = useNavigate();
-  
+  const [unreadChannels, setUnreadChannels] = useState(new Set());
   const [channels, setChannels] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [inVoiceChannel, setInVoiceChannel] = useState(false);
 
   // Usamos una ref para que los listeners siempre tengan acceso al canal actual
   const selectedChannelRef = useRef(selectedChannel);
@@ -50,8 +51,12 @@ function ChatPage() {
       // --------------------------
 
       socket.on('newMessage', (newMessage) => {
-        if (newMessage.channelId === selectedChannelRef.current?.id) {
-            setMessages(prevMessages => [...prevMessages, newMessage]);
+        // Si el mensaje es de un canal que no estamos viendo, lo marcamos como no leído
+        if (newMessage.channelId !== selectedChannelRef.current?.id) {
+          setUnreadChannels(prev => new Set(prev).add(newMessage.channelId));
+        } else {
+          // Si estamos viendo el canal, actualizamos los mensajes
+          setMessages(prevMessages => [...prevMessages, newMessage]);
         }
       });
       
@@ -71,8 +76,16 @@ function ChatPage() {
 
   const handleChannelSelect = (channel) => {
     const socket = getSocket();
-    setSelectedChannel(channel); // Actualiza el estado y la ref
+    setSelectedChannel(channel);
     setMessages([]);
+    
+    // Al seleccionar un canal, lo quitamos de la lista de no leídos
+    setUnreadChannels(prev => {
+      const newUnread = new Set(prev);
+      newUnread.delete(channel.id);
+      return newUnread;
+    });
+    
     socket.emit('joinChannel', { channelId: channel.id });
   };
   
@@ -104,8 +117,18 @@ function ChatPage() {
           channels={channels}
           selectedChannelId={selectedChannel?.id}
           onChannelSelect={handleChannelSelect}
+          unreadChannels={unreadChannels}
         />
         <div className="sidebar-footer">
+          {/* Botón para unirse al canal de voz del canal seleccionado */}
+          {selectedChannel && (
+            <button 
+              onClick={() => setInVoiceChannel(prev => !prev)}
+              className="voice-chat-button"
+            >
+              {inVoiceChannel ? 'Salir de Voz' : 'Unirse a Voz'}
+            </button>
+          )}
           <button onClick={handleCreateChannel} className="create-channel-button">
             Crear Canal
           </button>
@@ -122,6 +145,8 @@ function ChatPage() {
           typingUsers={typingUsers}
           onSendMessage={handleSendMessage}
         />
+        {/* Renderizado condicional del componente de voz */}
+        {inVoiceChannel && selectedChannel && <VoiceChat channelId={selectedChannel.id} />}
       </main>
     </div>
   );
