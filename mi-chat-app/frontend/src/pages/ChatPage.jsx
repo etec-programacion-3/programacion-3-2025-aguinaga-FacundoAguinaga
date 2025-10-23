@@ -1,47 +1,68 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react'; // Importa useRef
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { initSocket, getSocket, disconnectSocket } from '../services/socketService';
 
-// Importar los nuevos componentes
 import ChannelList from '../components/ChannelList';
 import ChatWindow from '../components/ChatWindow';
 
-// --- DATOS DE EJEMPLO (MOCK DATA) ---
-// En el futuro, esto vendrá de tu backend
-const mockChannels = [
-  { id: '1', name: 'general' },
-  { id: '2', name: 'random' },
-  { id: '3', name: 'tech' },
-];
-
-const mockMessages = {
-  '1': [
-    { id: 'm1', content: 'Bienvenidos al canal general!', author: { id: 'u1', name: 'Admin' } },
-    { id: 'm2', content: 'Hola a todos.', author: { id: 'u2', name: 'Facundo' } },
-  ],
-  '2': [
-    { id: 'm3', content: 'Este es el canal random.', author: { id: 'u1', name: 'Admin' } },
-  ],
-  '3': [], // Canal sin mensajes
-};
-
-const mockUsers = {
-    '1': [{id: 'u1', name: 'Admin'}, {id: 'u2', name: 'Facundo'}],
-    '2': [{id: 'u1', name: 'Admin'}],
-    '3': [],
-}
-// --- FIN DE DATOS DE EJEMPLO ---
-
-
 function ChatPage() {
-  const { logoutAction } = useAuth();
+  const { token, logoutAction } = useAuth();
   const navigate = useNavigate();
-
-  // Estados para gestionar la UI del chat
-  const [channels] = useState(mockChannels);
+  
+  const [channels, setChannels] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
+  const [typingUsers, setTypingUsers] = useState([]);
+
+  // Usamos una ref para que los listeners siempre tengan acceso al canal actual
+  const selectedChannelRef = useRef(selectedChannel);
+  useEffect(() => {
+    selectedChannelRef.current = selectedChannel;
+  }, [selectedChannel]);
+
+  useEffect(() => {
+    if (token) {
+      const socket = initSocket(token);
+      
+      socket.emit('getChannels');
+
+      socket.on('channelList', (serverChannels) => setChannels(serverChannels));
+      socket.on('messageHistory', (history) => setMessages(history));
+
+      socket.on('userTyping', ({ username, channelId }) => {
+        if (channelId === selectedChannelRef.current?.id) {
+          setTypingUsers(prev => [...new Set([...prev, username])]);
+        }
+      });
+
+      socket.on('userStoppedTyping', ({ username, channelId }) => {
+        if (channelId === selectedChannelRef.current?.id) {
+          setTypingUsers(prev => prev.filter(u => u !== username));
+        }
+      });
+
+      // --- AÑADE ESTE LISTENER ---
+      socket.on('updateUserList', (userList) => {
+        setUsers(userList);
+      });
+      // --------------------------
+
+      socket.on('newMessage', (newMessage) => {
+        if (newMessage.channelId === selectedChannelRef.current?.id) {
+            setMessages(prevMessages => [...prevMessages, newMessage]);
+        }
+      });
+      
+      socket.on('error', (error) => console.error("Error de Socket.IO:", error.message));
+      socket.on('channelCreated', (newChannel) => setChannels(prevChannels => [...prevChannels, newChannel]));
+    }
+
+    return () => {
+      disconnectSocket();
+    };
+  }, [token]);
 
   const handleLogout = () => {
     logoutAction();
@@ -49,36 +70,56 @@ function ChatPage() {
   };
 
   const handleChannelSelect = (channel) => {
-    setSelectedChannel(channel);
-    setMessages(mockMessages[channel.id] || []);
-    setUsers(mockUsers[channel.id] || []);
+    const socket = getSocket();
+    setSelectedChannel(channel); // Actualiza el estado y la ref
+    setMessages([]);
+    socket.emit('joinChannel', { channelId: channel.id });
   };
   
-  const handleSendMessage = (messageContent) => {
-    // Simula el envío de un mensaje
-    const newMessage = {
-      id: `m${Date.now()}`, // ID temporal
-      content: messageContent,
-      author: { id: 'u2', name: 'Facundo' }, // Usamos un usuario de ejemplo
-    };
-    setMessages(prevMessages => [...prevMessages, newMessage]);
+  const handleSendMessage = (content) => {
+    const socket = getSocket();
+    if (selectedChannel) {
+      socket.emit('sendMessage', { 
+        channelId: selectedChannel.id, 
+        content: content 
+      });
+    }
+  };
+
+  const handleCreateChannel = () => {
+    const channelName = prompt("Ingresa el nombre del nuevo canal:");
+    if (channelName && channelName.trim() !== '') {
+      const socket = getSocket();
+      socket.emit('createChannel', { name: channelName });
+      setTypingUsers([]); // Limpiar al cambiar de canal
+      // Ya no necesitamos un listener temporal 'once' aquí
+    }
   };
 
   return (
     <div className="chat-container">
       <div className="chat-sidebar-left">
+        <div className="channel-list-header">Chat App</div>
         <ChannelList
           channels={channels}
           selectedChannelId={selectedChannel?.id}
           onChannelSelect={handleChannelSelect}
         />
-        <button onClick={handleLogout} className="logout-button">Cerrar Sesión</button>
+        <div className="sidebar-footer">
+          <button onClick={handleCreateChannel} className="create-channel-button">
+            Crear Canal
+          </button>
+          <button onClick={handleLogout} className="logout-button">
+            Cerrar Sesión
+          </button>
+        </div>
       </div>
       <main className="chat-main">
         <ChatWindow
           channel={selectedChannel}
           messages={messages}
           users={users}
+          typingUsers={typingUsers}
           onSendMessage={handleSendMessage}
         />
       </main>

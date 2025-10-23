@@ -2,7 +2,7 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { Server as SocketServer } from 'socket.io';
-import jwt from 'jsonwebtoken'; // Corregido a import
+import jwt from 'jsonwebtoken';
 import 'dotenv/config';
 import authRoutes from './routes/auth.routes.js';
 import { PrismaClient } from '@prisma/client';
@@ -14,22 +14,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new SocketServer(server, {
   cors: {
-    origin: '*', // Restringir en producción
+    origin: "http://localhost:5173", // La dirección exacta de tu frontend
+    methods: ["GET", "POST"]
   },
 });
 
 // 2. Middleware de autenticación para Socket.IO
 io.use((socket, next) => {
-  // El token se espera como parte de la consulta en la conexión
   const token = socket.handshake.query.token;
   if (!token) {
     return next(new Error('Authentication error: Token not provided'));
   }
-
   try {
-    // Se verifica el token con la misma clave secreta
-    const decoded = jwt.verify(token, 'your-secret-key');
-    // Guardamos los datos del usuario (id, email, username) en el objeto socket
+    // Usa la variable de entorno para la clave secreta
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.user = decoded;
     next();
   } catch (err) {
@@ -41,21 +39,31 @@ io.use((socket, next) => {
 app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRoutes);
-app.use(express.static('public')); // Para servir el index.html
+app.use(express.static('public'));
 
 // 3. Lógica de Socket.IO
 io.on('connection', (socket) => {
   console.log(`✅ Cliente conectado: ${socket.id} (Usuario: ${socket.user.username})`);
+  socket.joinedChannels = new Set(); // Para rastrear los canales a los que se une el socket
 
-  // --- EVENTO: Crear un nuevo canal ---
+  // --- Evento para obtener la lista de canales ---
+  socket.on('getChannels', async () => {
+    try {
+      const allChannels = await prisma.channel.findMany();
+      socket.emit('channelList', allChannels);
+    } catch (error) {
+      console.error('Error en getChannels:', error);
+      socket.emit('error', { message: 'No se pudo obtener la lista de canales.' });
+    }
+  });
+
+  // --- Evento para crear un nuevo canal ---
   socket.on('createChannel', async (data) => {
     try {
       const { name } = data;
       if (!name) {
         return socket.emit('error', { message: 'El nombre del canal es requerido.' });
       }
-
-      // Crear el canal y conectar al usuario actual como su primer miembro
       const newChannel = await prisma.channel.create({
         data: {
           name,
@@ -64,21 +72,16 @@ io.on('connection', (socket) => {
           },
         },
       });
-
-      // Unir al usuario a la "room" de Socket.IO para este canal
       socket.join(newChannel.id);
-
-      // Confirmar la creación al cliente que lo solicitó
       socket.emit('channelCreated', newChannel);
       console.log(`📢 Canal "${newChannel.name}" creado por ${socket.user.username}`);
-
     } catch (error) {
       console.error('Error en createChannel:', error);
       socket.emit('error', { message: 'No se pudo crear el canal.' });
     }
   });
 
-  // --- EVENTO: Unirse a un canal existente ---
+  // --- Evento para unirse a un canal existente ---
   socket.on('joinChannel', async (data) => {
     try {
       const { channelId } = data;
@@ -86,29 +89,26 @@ io.on('connection', (socket) => {
         return socket.emit('error', { message: 'Se requiere el ID del canal.' });
       }
 
-      // Añadir al usuario a la lista de miembros del canal en la BD
       await prisma.channel.update({
         where: { id: channelId },
-        data: {
-          members: {
-            connect: { id: socket.user.id },
-          },
-        },
+        data: { members: { connect: { id: socket.user.id } } },
       });
 
-      // Unir al usuario a la "room" de Socket.IO
       socket.join(channelId);
+      socket.joinedChannels.add(channelId); // Rastrea el canal unido
+
       console.log(`🔗 Usuario ${socket.user.username} se unió al canal ${channelId}`);
 
-      // Obtener y enviar el historial de mensajes del canal
+      const updatedChannel = await prisma.channel.findUnique({
+          where: { id: channelId },
+          include: { members: { select: { id: true, username: true } } },
+      });
+      io.to(channelId).emit('updateUserList', updatedChannel.members);
+
       const messages = await prisma.message.findMany({
         where: { channelId },
         orderBy: { createdAt: 'asc' },
-        include: {
-          author: { // Incluir el autor para mostrar su nombre de usuario
-            select: { username: true },
-          },
-        },
+        include: { author: { select: { username: true } } },
       });
       socket.emit('messageHistory', messages);
 
@@ -118,15 +118,13 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- EVENTO: Enviar un mensaje a un canal ---
+  // --- Evento para enviar un mensaje ---
   socket.on('sendMessage', async (data) => {
     try {
       const { channelId, content } = data;
       if (!channelId || !content) {
         return socket.emit('error', { message: 'Faltan datos para enviar el mensaje.' });
       }
-
-      // 1. Guardar el mensaje en la base de datos
       const newMessage = await prisma.message.create({
         data: {
           content,
@@ -134,8 +132,6 @@ io.on('connection', (socket) => {
           channelId,
         },
       });
-
-      // 2. Preparar el objeto a retransmitir (incluyendo el username)
       const messagePayload = {
         id: newMessage.id,
         content: newMessage.content,
@@ -145,19 +141,55 @@ io.on('connection', (socket) => {
           username: socket.user.username,
         },
       };
-
-      // 3. Retransmitir el mensaje a TODOS los clientes en la "room" del canal
       io.to(channelId).emit('newMessage', messagePayload);
       console.log(`💬 Mensaje de ${socket.user.username} en canal ${channelId}: "${content}"`);
-
     } catch (error) {
       console.error('Error en sendMessage:', error);
       socket.emit('error', { message: 'No se pudo enviar el mensaje.' });
     }
   });
 
-  socket.on('disconnect', () => {
+  // --- Eventos para el indicador de "Escribiendo..." ---
+  socket.on('startTyping', ({ channelId }) => {
+    socket.broadcast.to(channelId).emit('userTyping', {
+      username: socket.user.username,
+      channelId,
+    });
+  });
+
+  socket.on('stopTyping', ({ channelId }) => {
+    socket.broadcast.to(channelId).emit('userStoppedTyping', {
+      username: socket.user.username,
+      channelId,
+    });
+  });
+
+  // --- Evento de desconexión ---
+  socket.on('disconnect', async () => {
     console.log(`❌ Cliente desconectado: ${socket.id}`);
+    
+    for (const channelId of socket.joinedChannels) {
+      // Primero, elimina al usuario de la lista de miembros en la BD
+      await prisma.channel.update({
+        where: { id: channelId },
+        data: {
+          members: {
+            disconnect: { id: socket.user.id },
+          },
+        },
+      });
+
+      // Luego, obtén la lista actualizada de miembros
+      const updatedChannel = await prisma.channel.findUnique({
+        where: { id: channelId },
+        include: { members: { select: { id: true, username: true } } },
+      });
+
+      // Finalmente, notifica a los clientes restantes en el canal
+      if (updatedChannel) {
+        io.to(channelId).emit('updateUserList', updatedChannel.members);
+      }
+    }
   });
 });
 
