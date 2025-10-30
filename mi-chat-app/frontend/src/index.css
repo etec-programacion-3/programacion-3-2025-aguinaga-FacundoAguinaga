@@ -86,7 +86,8 @@ ul {
   padding: 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  animation: itemFadeIn 0.5s ease-out;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .channel-item:hover {
@@ -134,16 +135,24 @@ ul {
 
 /* --- 5. Componentes de la Ventana Principal del Chat --- */
 .chat-window {
+  flex-grow: 1;
   display: flex;
-  height: 100%;
+  overflow: hidden;
+}
+
+/* Y añade esta nueva regla para el contenido */
+.chat-window-content {
+  flex-grow: 1;
+  display: flex;
+  overflow: hidden;
 }
 
 .chat-main-panel {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
-
 .chat-header {
   display: flex;
   align-items: center;
@@ -264,6 +273,8 @@ ul {
   align-items: center;
   gap: 8px;
   padding: 8px 0;
+  animation: itemFadeIn 0.5s ease-out;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .status-indicator {
@@ -292,26 +303,44 @@ ul {
 }
 
 /* --- Estilos para las páginas de Autenticación --- */
+/* src/index.css */
+
+/* --- Estilos para las páginas de Autenticación --- */
 .auth-container {
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background-color: var(--background-secondary);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
 .auth-form-wrapper {
-  background-color: var(--background-primary);
+  background-color: rgba(255, 255, 255, 0.95);
   padding: 40px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   width: 100%;
   max-width: 400px;
   text-align: center;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.auth-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0;
 }
 
 .auth-form-wrapper h2 {
-  margin-top: 0;
+  margin-top: 8px;
+  font-weight: 300;
+  color: #555;
+}
+
+.auth-subtitle {
+  color: var(--text-secondary);
   margin-bottom: 24px;
 }
 
@@ -322,32 +351,41 @@ ul {
 }
 
 .auth-form-wrapper input {
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  padding: 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
   font-size: 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.auth-form-wrapper input:focus {
+  outline: none;
+  border-color: var(--button-primary);
+  box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
 }
 
 .auth-form-wrapper button {
-  padding: 12px;
+  padding: 14px;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   background-color: var(--button-primary);
   color: white;
   font-weight: bold;
   font-size: 1rem;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease-in-out;
 }
 
 .auth-form-wrapper button:hover {
   background-color: var(--button-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.3);
 }
 
 .auth-form-wrapper .error-message {
   color: #da373c;
   margin-top: 16px;
-  min-height: 1.2em; /* Para que no salte el layout */
+  min-height: 1.2em;
 }
 
 .auth-form-wrapper .switch-auth {
@@ -373,6 +411,22 @@ ul {
   }
 }
 
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes itemFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .message {
   /* ... tus estilos existentes ... */
   animation: fadeIn 0.3s ease-out;
@@ -381,6 +435,7 @@ ul {
 /* --- Transiciones suaves --- */
 .channel-item, .sidebar-footer button, .message-input-wrapper button {
   transition: all 0.2s ease-in-out;
+  
 }
 
 /* Indicador de "escribiendo..." */
@@ -411,4 +466,137 @@ ul {
   background-color: var(--background-secondary);
   border-top: 1px solid var(--border-color);
   text-align: center;
+}
+
+.message-input-container {
+  position: relative; /* Clave para que el picker se posicione correctamente */
+}
+
+.emoji-picker-input {
+  position: absolute;
+  bottom: 100%; /* Posiciona el picker justo encima del input */
+  left: 0;
+  width: 100%;
+  z-index: 10;
+}
+
+/* Ajuste para que el picker no sea demasiado grande */
+.emoji-picker-input .EmojiPickerReact {
+  width: 100% !important;
+}
+
+.loading-spinner {
+  text-align: center;
+  padding: 10px;
+  color: var(--text-secondary);
+}
+
+.media-chat-container {
+  padding: 8px;
+  background-color: var(--background-sidebar);
+  border-top: 1px solid var(--hover-sidebar-item);
+  color: var(--text-sidebar-primary);
+  animation: slideInUp 0.3s ease-out;
+}
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  transition: all 0.3s ease-in-out;
+}
+
+.video-grid video {
+  width: 100%;
+  aspect-ratio: 4 / 3; /* Proporción 4:3 para el video */
+  border-radius: 4px;
+  background-color: black;
+  object-fit: cover; /* Asegura que el video llene el contenedor */
+}
+
+.media-controls {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+.media-controls button {
+  background-color: #3ba55d;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+}
+
+.media-controls button.control-off {
+  background-color: #da373c;
+}
+
+.video-item {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 16 / 9;
+  cursor: pointer;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease-in-out;
+}
+
+.video-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* --- ESTILOS CUANDO UNA CÁMARA ESTÁ EN FOCO --- */
+.video-grid.focused {
+  display: flex;
+  flex-direction: row;
+  height: 250px; /* Altura del contenedor cuando hay un foco */
+}
+
+.video-grid.focused .video-item {
+  width: 120px; /* Ancho de las miniaturas */
+  height: 67px; /* Altura 16:9 para 120px de ancho */
+  flex-shrink: 0;
+}
+
+.video-grid.focused .video-item.is-focused {
+  width: 100%;
+  height: 100%;
+  flex-grow: 1; /* Ocupa el espacio principal */
+  order: -1; /* Mueve el video en foco al principio */
+  margin-right: 8px;
+}
+
+/* Opcional: Mostrar los otros como miniaturas abajo */
+.video-grid.focused::after {
+  content: '';
+  display: flex;
+  height: 20%;
+  gap: 8px;
+  /* Aquí iría lógica más compleja para mostrar las miniaturas */
+}
+
+.history-end {
+  text-align: center;
+  padding: 10px;
+  color: var(--text-sidebar-secondary);
+  font-style: italic;
+  font-size: 0.9rem;
+}
+
+button, .reaction-chip {
+  transition: all 0.2s ease-in-out;
+}
+
+button:hover, .reaction-chip:hover {
+  transform: scale(1.05); /* Efecto de crecimiento sutil */
 }

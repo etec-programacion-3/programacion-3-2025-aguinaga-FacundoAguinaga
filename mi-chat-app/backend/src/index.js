@@ -11,6 +11,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const voiceChannels = {};
+const activeUsers = new Map(); // Map<userId, socketId>
 
 // 1. Inicialización del servidor
 const app = express();
@@ -41,7 +42,7 @@ io.use((socket, next) => {
 // Middlewares y Rutas de Express
 app.use(cors());
 app.use(express.json());
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authRoutes(io, activeUsers));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,7 +56,30 @@ app.get(/^(?!\/api).*/, (req, res) => {
 // 3. Lógica de Socket.IO
 io.on('connection', (socket) => {
   console.log(`✅ Cliente conectado: ${socket.id} (Usuario: ${socket.user.username})`);
+  
   socket.joinedChannels = new Set(); // Para rastrear los canales a los que se une el socket
+
+  // --- NUEVA LÓGICA DE SESIÓN ÚNICA ---
+  const userId = socket.user.userId;
+  const existingSocketId = activeUsers.get(userId);
+
+  if (existingSocketId) {
+    // Si ya hay un socket para este usuario, lo desconectamos
+    console.log(`🔌 Usuario ${socket.user.username} ya tiene una sesión. Desconectando la antigua: ${existingSocketId}`);
+    
+    io.to(existingSocketId).emit('force-disconnect', {
+      message: 'Has iniciado sesión desde otro dispositivo.',
+    });
+    
+    // Desconectamos forzosamente el socket antiguo
+    io.sockets.sockets.get(existingSocketId)?.disconnect();
+  }
+
+  // Registramos la NUEVA sesión
+  activeUsers.set(userId, socket.id);
+  // --- FIN DE LA LÓGICA DE SESIÓN ÚNICA ---
+
+  socket.joinedChannels = new Set();
 
   // --- Evento para obtener la lista de canales ---
   socket.on('getChannels', async () => {
@@ -79,7 +103,7 @@ io.on('connection', (socket) => {
         data: {
           name,
           members: {
-            connect: { id: socket.user.id },
+            connect: { id: socket.user.userId },
           },
         },
       });
@@ -102,7 +126,7 @@ io.on('connection', (socket) => {
 
       await prisma.channel.update({
         where: { id: channelId },
-        data: { members: { connect: { id: socket.user.id } } },
+        data: { members: { connect: { id: socket.user.userId } } },
       });
 
       socket.join(channelId);
@@ -118,10 +142,15 @@ io.on('connection', (socket) => {
 
       const messages = await prisma.message.findMany({
         where: { channelId },
-        orderBy: { createdAt: 'asc' },
-        include: { author: { select: { username: true } } },
+        orderBy: { createdAt: 'desc' }, // Ordenar por más nuevo primero
+        take: 50, // Tomar solo los últimos 50
+        include: {
+          author: { select: { username: true } },
+          reactions: { include: { user: { select: { username: true } } } },
+        },
       });
-      socket.emit('messageHistory', messages);
+
+      socket.emit('messageHistory', messages.reverse()); // Enviar en orden cronológico
 
     } catch (error) {
       console.error('Error en joinChannel:', error);
@@ -139,7 +168,7 @@ io.on('connection', (socket) => {
       const newMessage = await prisma.message.create({
         data: {
           content,
-          authorId: socket.user.id,
+          authorId: socket.user.userId,
           channelId,
         },
       });
@@ -160,6 +189,69 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('get-older-messages', async ({ channelId, cursor }) => {
+    try {
+      if (!cursor) return; // No hacer nada si no hay un punto de partida
+  
+      const messages = await prisma.message.findMany({
+        where: { channelId },
+        orderBy: { createdAt: 'desc' },
+        take: 30, // Cargar lotes de 30
+        skip: 1, // Importante: saltar el mensaje cursor para no repetirlo
+        cursor: { id: cursor }, // Empezar a buscar desde el último mensaje conocido
+        include: {
+          author: { select: { username: true } },
+          reactions: { include: { user: { select: { username: true } } } },
+        },
+      });
+  
+      // Enviamos los mensajes más antiguos también en orden cronológico
+      socket.emit('older-messages-loaded', messages.reverse());
+      
+    } catch (error) {
+      console.error('Error al obtener mensajes antiguos:', error);
+    }
+  });
+
+  socket.on('react-to-message', async ({ messageId, emoji }) => {
+    try {
+      const existingReaction = await prisma.reaction.findFirst({
+        where: { messageId, emoji, userId: socket.user.userId },
+      });
+
+      if (existingReaction) {
+        // Si ya reaccionó, elimina la reacción
+        await prisma.reaction.delete({ where: { id: existingReaction.id } });
+      } else {
+        // Si no, añade la reacción
+        await prisma.reaction.create({
+          data: {
+            emoji,
+            messageId,
+            userId: socket.user.userId,
+          },
+        });
+      }
+
+      // Obtén el mensaje actualizado con todas sus reacciones
+      const updatedMessage = await prisma.message.findUnique({
+        where: { id: messageId },
+        include: { 
+          author: { select: { username: true } },
+          reactions: { include: { user: { select: { username: true } } } }
+        },
+      });
+      
+      const channelId = updatedMessage.channelId;
+      // Notifica a todos en el canal que el mensaje ha sido actualizado
+      io.to(channelId).emit('message-updated', updatedMessage);
+
+    } catch (error) {
+      console.error('Error en react-to-message:', error);
+      socket.emit('error', { message: 'No se pudo procesar la reacción.' });
+    }
+  });
+
   // --- Eventos para el indicador de "Escribiendo..." ---
   socket.on('startTyping', ({ channelId }) => {
     socket.broadcast.to(channelId).emit('userTyping', {
@@ -174,35 +266,51 @@ io.on('connection', (socket) => {
       channelId,
     });
   });
+// --- Evento de desconexión ---
+socket.on('disconnect', async () => {
+  console.log(`❌ Cliente desconectado: ${socket.id}`);
 
-  // --- Evento de desconexión ---
-  socket.on('disconnect', async () => {
-    console.log(`❌ Cliente desconectado: ${socket.id}`);
-    
-    for (const channelId of socket.joinedChannels) {
-      // Primero, elimina al usuario de la lista de miembros en la BD
+  // Limpiamos el registro de usuario activo solo si es la sesión que teníamos guardada
+  if (activeUsers.get(socket.user.userId) === socket.id) {
+    activeUsers.delete(socket.user.userId);
+  }
+
+  // --- Limpieza de canales de chat de texto ---
+  for (const channelId of socket.joinedChannels) {
+    try {
+      // Elimina al usuario de la lista de miembros en la BD
       await prisma.channel.update({
         where: { id: channelId },
         data: {
           members: {
-            disconnect: { id: socket.user.id },
+            disconnect: { id: socket.user.userId },
           },
         },
       });
 
-      // Luego, obtén la lista actualizada de miembros
+      // Obtén la lista actualizada de miembros
       const updatedChannel = await prisma.channel.findUnique({
         where: { id: channelId },
         include: { members: { select: { id: true, username: true } } },
       });
 
-      // Finalmente, notifica a los clientes restantes en el canal
+      // Notifica a los clientes restantes en el canal
       if (updatedChannel) {
         io.to(channelId).emit('updateUserList', updatedChannel.members);
       }
+    } catch (error) {
+      console.error(`Error al limpiar el canal ${channelId} para el usuario desconectado:`, error);
     }
-  });
+  }
 
+  // --- Limpieza de canales de voz ---
+  for (const channelId in voiceChannels) {
+    if (voiceChannels[channelId][socket.id]) {
+      delete voiceChannels[channelId][socket.id];
+      socket.broadcast.to(channelId).emit('user-left-voice', { socketId: socket.id });
+    }
+  }
+});
   // --- Eventos de Señalización para WebRTC ---
 
   socket.on('join-voice-channel', (channelId) => {
@@ -216,11 +324,11 @@ io.on('connection', (socket) => {
     socket.emit('existing-voice-users', existingUsers);
 
     // Añadimos al nuevo usuario al registro
-    voiceChannels[channelId][socket.id] = socket.user.id;
+    voiceChannels[channelId][socket.id] = socket.user.userId;
     
     // Notificamos a los demás que un nuevo usuario se ha unido
     socket.broadcast.to(channelId).emit('user-joined-voice', { 
-      userId: socket.user.id, 
+      userId: socket.user.userId, 
       socketId: socket.id 
     });
   });
@@ -245,17 +353,6 @@ io.on('connection', (socket) => {
     socket.to(targetSocketId).emit('ice-candidate', { candidate, fromSocketId: socket.id });
   });
 
-  socket.on('disconnect', async () => {
-    console.log(`❌ Cliente desconectado: ${socket.id}`);
-    
-    // Eliminar al usuario de cualquier canal de voz en el que estuviera
-    for (const channelId in voiceChannels) {
-      if (voiceChannels[channelId][socket.id]) {
-        delete voiceChannels[channelId][socket.id];
-        socket.broadcast.to(channelId).emit('user-left-voice', { socketId: socket.id });
-      }
-    }
-  });
 });
 
 // 4. Iniciar el servidor

@@ -1,38 +1,64 @@
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import UserList from './UserList';
-import TypingIndicator from './TypingIndicator';
-import { FaHashtag } from 'react-icons/fa';
 
+// Componente para la cabecera del chat
+const ChatHeader = ({ channelName }) => (
+  <div className="chat-header">
+    <h2># {channelName}</h2>
+  </div>
+);
+
+// Componente para el indicador de "escribiendo..."
+const TypingIndicator = ({ users }) => {
+  if (users.length === 0) {
+    return <div className="typing-indicator"></div>;
+  }
+  
+  const typingText = users.length === 1 
+    ? `${users[0]} está escribiendo...` 
+    : `${users.join(', ')} están escribiendo...`;
+
+  return (
+    <div className="typing-indicator">
+      {typingText}
+    </div>
+  );
+};
+
+// Componente principal de la ventana de chat
 function ChatWindow({ channel, messages, users, typingUsers, onSendMessage }) {
-  // --- Comprobación de nulidad al principio ---
-  // Si no hay canal seleccionado, muestra el mensaje de bienvenida y detiene la ejecución.
+  // Muestra un placeholder si no hay ningún canal seleccionado
   if (!channel) {
     return (
       <div className="chat-window-placeholder">
         <div>
-          <h2>¡Bienvenido a tu chat!</h2>
-          <p>Selecciona o crea un canal para empezar a conversar.</p>
+          <h2>Bienvenido a tu Chat App</h2>
+          <p>Selecciona un canal para comenzar a chatear.</p>
         </div>
       </div>
     );
   }
 
-  // A partir de aquí, podemos asumir que 'channel' no es nulo.
   return (
-    <div className="chat-window">
+    // 👇 ESTRUCTURA CORREGIDA 👇
+    <div className="chat-window-content">
+      {/* 1. Panel principal que contiene el chat */}
       <div className="chat-main-panel">
-        <header className="chat-header">
-          <FaHashtag size={20} color="#8e9297" />
-          <h2>{channel.name}</h2>
-        </header>
-        <MessageList messages={messages} />
-        <TypingIndicator typingUsers={typingUsers} />
-        <MessageInput onSendMessage={onSendMessage} channelId={channel.id} />
+        <ChatHeader channelName={channel.name} />
+        <MessageList 
+          messages={messages} 
+          channelId={channel.id} 
+        />
+        <TypingIndicator users={typingUsers} />
+        <MessageInput 
+          onSendMessage={onSendMessage} 
+          channelId={channel.id} 
+        />
       </div>
-      <div className="chat-sidebar-right">
-        <UserList users={users} />
-      </div>
+
+      {/* 2. La lista de usuarios es ahora "hermana" del panel principal y se posicionará a la derecha */}
+      <UserList users={users} />
     </div>
   );
 }

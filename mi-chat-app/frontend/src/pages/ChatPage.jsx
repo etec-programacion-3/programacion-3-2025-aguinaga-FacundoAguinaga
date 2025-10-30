@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'; // Importa useRef
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { initSocket, getSocket, disconnectSocket } from '../services/socketService';
-import VoiceChat from '../components/VoiceChat';
+import MediaChat from '../components/MediaChat';
 import ChannelList from '../components/ChannelList';
 import ChatWindow from '../components/ChatWindow';
 
@@ -32,6 +32,21 @@ function ChatPage() {
       socket.on('channelList', (serverChannels) => setChannels(serverChannels));
       socket.on('messageHistory', (history) => setMessages(history));
 
+
+    // 👇 NUEVO LISTENER PARA LA DESCONEXIÓN FORZADA
+    socket.on('force-disconnect', (data) => {
+      alert(data.message || 'Tu sesión ha sido cerrada.');
+      logoutAction();
+      navigate('/login');
+    });
+
+    // Este listener recibe los mensajes más antiguos y los añade al PRINCIPIO del array
+    socket.on('older-messages-loaded', (olderMessages) => {
+      if (olderMessages.length > 0) {
+        setMessages(prevMessages => [...olderMessages, ...prevMessages]);
+      }
+    });
+      
       socket.on('userTyping', ({ username, channelId }) => {
         if (channelId === selectedChannelRef.current?.id) {
           setTypingUsers(prev => [...new Set([...prev, username])]);
@@ -44,7 +59,14 @@ function ChatPage() {
         }
       });
 
-      // --- AÑADE ESTE LISTENER ---
+      socket.on('message-updated', (updatedMessage) => {
+        setMessages(prevMessages => 
+          prevMessages.map(msg => 
+            msg.id === updatedMessage.id ? updatedMessage : msg
+          )
+        );
+      });
+
       socket.on('updateUserList', (userList) => {
         setUsers(userList);
       });
@@ -65,10 +87,26 @@ function ChatPage() {
     }
 
     return () => {
-      disconnectSocket();
-    };
-  }, [token]);
+      const socket = getSocket();
+      if (socket) {
+        // 1. Primero, limpiamos todos los listeners.
+        socket.off('older-messages-loaded');
+        socket.off('userTyping');
+        socket.off('userStoppedTyping');
+        socket.off('message-updated');
+        socket.off('updateUserList');
+        socket.off('newMessage');
+        socket.off('error');
+        socket.off('channelCreated');
+        socket.off('channelList');
+        socket.off('messageHistory');
+        socket.off('force-disconnect');
 
+        // 2. Y al final, nos desconectamos.
+        disconnectSocket();
+      }
+    };
+  }, [token, logoutAction, navigate]);
   const handleLogout = () => {
     logoutAction();
     navigate('/login');
@@ -146,7 +184,7 @@ function ChatPage() {
           onSendMessage={handleSendMessage}
         />
         {/* Renderizado condicional del componente de voz */}
-        {inVoiceChannel && selectedChannel && <VoiceChat channelId={selectedChannel.id} />}
+        {inVoiceChannel && selectedChannel && <MediaChat channelId={selectedChannel.id} />}
       </main>
     </div>
   );
