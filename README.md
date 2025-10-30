@@ -1,4 +1,3 @@
-````markdown
 # 🚀 Slard Chat App
 
 **Slard** es una aplicación de chat en tiempo real con todas las funciones, construida con React, Node.js, Socket.IO, Prisma y WebRTC. Permite a los usuarios comunicarse a través de canales de texto, reaccionar a mensajes y realizar videollamadas grupales de alta performance.
