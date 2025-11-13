@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { register } from '../services/authService';
 
-function Register() {
-  const [username, setUsername] = useState('');
+function RegisterPage() {
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -13,7 +13,7 @@ function Register() {
     e.preventDefault();
     setError('');
     try {
-      await register({ username, email, password });
+      await register({ email, username, password });
       navigate('/login');
     } catch (err) {
       setError(err.message);
@@ -23,20 +23,22 @@ function Register() {
   return (
     <div className="auth-container">
       <div className="auth-form-wrapper">
-        <h2>Crear Cuenta</h2>
+        <h1 className="auth-title">Slard</h1>
+        <h2>Crea tu cuenta</h2>
+        <p className="auth-subtitle">Únete a la conversación.</p>
         <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Nombre de usuario"
-            required
-          />
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
+            placeholder="Correo Electrónico"
+            required
+          />
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Nombre de Usuario"
             required
           />
           <input
@@ -48,13 +50,13 @@ function Register() {
           />
           <button type="submit">Registrarse</button>
         </form>
-        <p className="error-message">{error}</p>
-        <p className="switch-auth">
-          ¿Ya tienes una cuenta? <Link to="/login">Inicia sesión</Link>
-        </p>
+        {error && <p className="error-message">{error}</p>}
+        <div className="switch-auth">
+          ¿Ya tienes una cuenta? <Link to="/login">Inicia Sesión</Link>
+        </div>
       </div>
     </div>
   );
 }
 
-export default Register;
+export default RegisterPage;
