@@ -29,7 +29,7 @@ Antes de comenzar, asegúrate de tener instalado lo siguiente:
 
 ---
 
-## 🔧 Instalación Manual (Recomendada)
+## 🔧 Instalación Manual
 
 Este método te da control total sobre la configuración y es el más fiable.
 
@@ -79,7 +79,36 @@ npm install
 
 #### Opción A: Pruebas Locales (Un solo dispositivo)
 
-¡No necesitas hacer nada más\! El código ya está configurado para `localhost`.
+ve a frontend/src/services.
+
+modifica en authService.jsx la variable ApiURL a http://localhost:3000/api/auth
+modifica en socketService.js la variable ServerURL a http://localhost:3000/
+
+
+1.  **Construir el Frontend (Build):**
+
+    ```bash
+    # Desde la carpeta 'frontend'
+    npm run build
+    ```
+
+2.  **Mover el Build al Backend:**
+
+    ```bash
+    # (Desde la carpeta 'frontend')
+    # Mueve la carpeta 'dist' generada al backend
+    mv dist ../backend/
+    ```
+
+3.  **Iniciar el Servidor:**
+
+    ```bash
+    # Desde la carpeta 'frontend', ve al backend
+    cd ../backend
+
+    # Inicia el servidor
+    node src/index.js
+    ```
 
 #### Opción B: Pruebas en Red (Múltiples dispositivos)
 
@@ -94,29 +123,8 @@ Para que otros dispositivos (como tu teléfono) en tu misma red Wi-Fi puedan con
 2.  **Configura el Frontend:**
     Edita los siguientes archivos en `frontend/src/services/`:
 
-      * `authService.js`: Cambia `http://localhost:3000` por `http://TU_IP_PRIVADA:3000`.
-      * `socketService.js`: Cambia `http://localhost:3000` por `http://TU_IP_PRIVADA:3000`.
-
-3.  **Configura el Backend:**
-    Edita `backend/src/index.js` y actualiza la configuración de CORS para permitir la conexión desde tu IP (o desde cualquier origen para pruebas).
-
-    *Busca:*
-
-    ```javascript
-    cors: {
-      origin: "http://localhost:5173",
-      // ...
-    },
-    ```
-
-    *Reemplaza con:*
-
-    ```javascript
-    cors: {
-      origin: "*", // Permite cualquier origen (más fácil para pruebas)
-      // ...
-    },
-    ```
+      * `authService.js`: Cambia el valor de la variable `ApiURL` por `http://TU_IP_PRIVADA:3000`.
+      * `socketService.js`: Cambia el valor de la variable `ServerURL` por `http://TU_IP_PRIVADA:3000`.
 
 ### 5\. Iniciar la Aplicación
 
